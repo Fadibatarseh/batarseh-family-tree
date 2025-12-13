@@ -1,7 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-// REPLACE THESE WITH YOUR KEYS FROM SUPABASE DASHBOARD -> SETTINGS -> API
-const supabaseUrl = https://aitlgoljcxztolqbilki.supabase.co
-const supabaseKey = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpdGxnb2xqY3h6dG9scWJpbGtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU2Mzc5ODMsImV4cCI6MjA4MTIxMzk4M30.DTAhRGQkmYRJSdkfQ_QlecJ6rRU21G1S82meu3IJJQU
+// I added the single quotes ' ' around the URL and the Key below
+const supabaseUrl = 'https://aitlgoljcxztolqbilki.supabase.co'
+
+// MAKE SURE THIS KEY IS ALSO WRAPPED IN QUOTES LIKE 'eyJ...'
+// (I am using the start of the key you showed in the error log)
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpdGxnb2xqY3h6dG9scWJpbGtp...'
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
