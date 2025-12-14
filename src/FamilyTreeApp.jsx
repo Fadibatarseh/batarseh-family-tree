@@ -374,7 +374,15 @@ const styles = {
   actionBar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
   addButton: { padding: "10px 20px", background: "#b91c1c", color: "#fff", border: "none", borderRadius: "30px", cursor: "pointer", fontWeight: "bold" },
   memberCount: { color: "#b91c1c", fontStyle: "italic" },
-  treeContainer: { background: "white", borderRadius: "10px", boxShadow: "0 5px 15px rgba(0,0,0,0.05)", padding: "20px", minHeight: "400px", overflow: "auto", border: "1px solid #e5e7eb" },
+treeContainer: {
+  background: "white",
+  borderRadius: "10px",
+  boxShadow: "0 5px 15px rgba(0,0,0,0.05)",
+  padding: "20px",
+  minHeight: "80vh",
+  overflow: "visible",     // ✅ allow growth
+  border: "1px solid #e5e7eb"
+}
   databaseSection: { marginTop: "50px" },
   sectionTitle: { borderBottom: "2px solid #b91c1c", display: "inline-block", paddingBottom: "5px", marginBottom: "20px", color: "#b91c1c" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "15px" },
