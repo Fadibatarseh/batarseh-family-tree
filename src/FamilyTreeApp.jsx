@@ -9,7 +9,8 @@ export default function FamilyTreeApp() {
   
   const [currentEdit, setCurrentEdit] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", birth: "", death: "", img_url: "", parents: [],spouse: "" });
+  // UPDATED: Added spouse to the initial state
+  const [form, setForm] = useState({ name: "", birth: "", death: "", img_url: "", parents: [], spouse: "" });
   const treeRef = useRef(null);
 
   useEffect(() => {
@@ -35,73 +36,33 @@ export default function FamilyTreeApp() {
 
   useEffect(() => { if (!loading) renderTree(); }, [people, loading]);
 
+  // UPDATED: renderTree with Spouse Lines
   async function renderTree() {
     if (!treeRef.current || Object.keys(people).length === 0) return;
-    
-    // Start the chart definition
     let chart = `flowchart TD\n`;
     chart += `classDef mainNode fill:#fff,stroke:#b91c1c,stroke-width:2px,rx:5,ry:5,color:#000,width:150px;\n`;
     chart += `linkStyle default stroke:#666,stroke-width:2px;\n`;
 
-    // 1. Draw Nodes (The People)
+    // 1. Draw Nodes
     Object.values(people).forEach(p => {
       const safeName = p.name.replace(/"/g, "'");
       const imgTag = p.img_url ? `<img src='${p.img_url}' width='60' height='60' style='border-radius:50%; object-fit:cover; margin-bottom:5px;' /><br/>` : "";
-      
-      // We add the node to the chart string
       chart += `${p.id}("${imgTag}<b>${safeName}</b><br/><span style='font-size:0.8em'>${p.birth}${p.death ? ` - ${p.death}` : ""}</span>"):::mainNode\n`;
     });
 
-    // 2. Draw Spouse Links (NEW)
-    // We use a Set to make sure we don't draw the line twice (once for husband->wife, once for wife->husband)
+    // 2. Draw Spouse Links (<-->)
     const processedSpouses = new Set();
-    
     Object.values(people).forEach(p => {
       if (p.spouse && people[p.spouse]) {
-        // Create a unique ID for this couple (e.g., "A-B" is the same as "B-A")
         const coupleId = [p.id, p.spouse].sort().join("-");
-        
         if (!processedSpouses.has(coupleId)) {
-           // Draw a double-arrow line <--> for marriage
            chart += `${p.id} <--> ${p.spouse}\n`; 
            processedSpouses.add(coupleId);
         }
       }
     });
 
-    // 3. Draw Parent Links (Children)
-    Object.values(people).forEach(p => {
-      if (p.parents) {
-        p.parents.forEach(parId => {
-          if (people[parId]) {
-            // Draw arrow from Parent --> Child
-            chart += `${parId} --> ${p.id}\n`;
-          }
-        });
-      }
-    });
-
-    // Render the chart into the HTML
-    treeRef.current.innerHTML = `<pre class="mermaid" style="width: 100%; height: 100%;">${chart}</pre>`;
-    try { 
-        await mermaid.run({ nodes: treeRef.current.querySelectorAll('.mermaid') }); 
-    } catch (error) { 
-        console.error("Mermaid Render Error:", error); 
-    }
-  }
-<label style={styles.label}>Spouse (Optional)</label>
-            <select 
-                value={form.spouse || ""} 
-                onChange={e => setForm({ ...form, spouse: e.target.value })} 
-                style={styles.input}
-            >
-                <option value="">No Spouse / Unknown</option>
-                {Object.values(people)
-                    .filter(p => p.id !== currentEdit) // Don't let them marry themselves!
-                    .map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-            </select>
+    // 3. Draw Parent Links (-->)
     Object.values(people).forEach(p => {
       if (p.parents) {
         p.parents.forEach(parId => {
@@ -118,13 +79,13 @@ export default function FamilyTreeApp() {
   function openEdit(id) {
     const p = people[id];
     setCurrentEdit(id);
-    setForm({ ...p, parents: p.parents || [] });
+    setForm({ ...p, parents: p.parents || [], spouse: p.spouse || "" });
     setModalOpen(true);
   }
 
   function openAdd() {
     setCurrentEdit(null);
-    setForm({ name: "", birth: "", death: "", img_url: "", parents: [] });
+    setForm({ name: "", birth: "", death: "", img_url: "", parents: [], spouse: "" });
     setModalOpen(true);
   }
 
@@ -137,34 +98,29 @@ export default function FamilyTreeApp() {
     }
   }
 
+  // UPDATED: Save function handling empty strings and spouse
   async function save() {
-    // 1. Clean up the data before sending
-    // If the box is empty strings (""), send null instead.
     const personData = { 
       name: form.name, 
       birth: form.birth || null, 
       death: form.death || null, 
       img_url: form.img_url || null, 
-      parents: form.parents || [] // Ensure parents is always an array,
-      spouse: form.spouse || null //
+      parents: form.parents || [],
+      spouse: form.spouse || null
     };
-
+    
     try {
         if (currentEdit) {
-          const { error } = await supabase.from('family_members').update(personData).eq('id', currentEdit);
-          if (error) throw error;
+            await supabase.from('family_members').update(personData).eq('id', currentEdit);
         } else {
-          const { error } = await supabase.from('family_members').insert([personData]);
-          if (error) throw error;
+            await supabase.from('family_members').insert([personData]);
         }
         await fetchPeople();
         setModalOpen(false);
     } catch (error) {
         alert("Error saving: " + error.message);
-        console.error(error);
     }
   }
-
   return (
     <div style={styles.pageContainer}>
       <div style={styles.heroSection}>
@@ -209,6 +165,7 @@ export default function FamilyTreeApp() {
             <h3 style={{ margin: "0 0 20px 0" }}>{currentEdit ? "Edit Profile" : "Add New Member"}</h3>
             <label style={styles.label}>Full Name</label>
             <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={styles.input} />
+            
             <div style={{display:"flex", gap:"10px"}}>
                 <div style={{flex:1}}>
                     <label style={styles.label}>Birth Year</label>
@@ -219,8 +176,25 @@ export default function FamilyTreeApp() {
                     <input value={form.death} onChange={e => setForm({ ...form, death: e.target.value })} style={styles.input} />
                 </div>
             </div>
+            
             <label style={styles.label}>Photo URL</label>
             <input placeholder="https://..." value={form.img_url} onChange={e => setForm({ ...form, img_url: e.target.value })} style={styles.input} />
+
+            {/* NEW SPOUSE SELECTOR */}
+            <label style={styles.label}>Spouse (Optional)</label>
+            <select 
+                value={form.spouse || ""} 
+                onChange={e => setForm({ ...form, spouse: e.target.value })} 
+                style={styles.input}
+            >
+                <option value="">No Spouse / Unknown</option>
+                {Object.values(people)
+                    .filter(p => p.id !== currentEdit)
+                    .map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+            </select>
+
             <div>
                <label style={styles.label}>Parents:</label>
                <div style={styles.parentList}>
@@ -243,60 +217,18 @@ export default function FamilyTreeApp() {
   );
 }
 
-// === ALL STYLES (UPDATED BEIGE THEME) ===
-// === ALL STYLES (MAXIMUM LOGO SIZE) ===
 const styles = {
-  pageContainer: {
-    fontFamily: "'Georgia', 'Times New Roman', serif",
-    minHeight: "100vh",
-    backgroundColor: "#f4f1ea", 
-  },
-  
-  // --- HERO SECTION ---
-  heroSection: { 
-    position: "fixed", top: 0, left: 0, width: "100%", height: "90vh", 
-    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 0, 
-    backgroundColor: "#f4f1ea", 
-    textAlign: "center" 
-  },
-  heroContent: { 
-    width: "100%", height: "100%", 
-    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", 
-    padding: "10px" // Reduced padding to allow more space for logo
-  },
-  
-  // --- HUGE LOGO UPDATE ---
-  bigLogo: { 
-    maxWidth: "95vw",   // Takes up 95% of the screen width
-    maxHeight: "75vh",  // Takes up 75% of the screen height
-    width: "auto", 
-    height: "auto", 
-    objectFit: "contain",
-  },
-  
-  heroTitle: { 
-    fontSize: "2.5em", fontWeight: "normal", margin: "10px 0 5px 0", letterSpacing: "2px",
-    color: "#b91c1c" 
-  },
-  heroSubtitle: { 
-    fontSize: "1.2em", fontStyle: "italic",
-    color: "#b91c1c", 
-    opacity: 0.8 
-  },
-
-  // --- CONTENT LAYER ---
-  contentLayer: { 
-    position: "relative", zIndex: 10, marginTop: "85vh", 
-    backgroundColor: "#f4f1ea", 
-    minHeight: "100vh", 
-    boxShadow: "0 -10px 30px rgba(185, 28, 28, 0.1)", 
-    borderTopLeftRadius: "30px", borderTopRightRadius: "30px", paddingBottom: "100px" 
-  },
+  pageContainer: { fontFamily: "'Georgia', 'Times New Roman', serif", minHeight: "100vh", backgroundColor: "#f4f1ea" },
+  heroSection: { position: "fixed", top: 0, left: 0, width: "100%", height: "90vh", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 0, backgroundColor: "#f4f1ea", textAlign: "center" },
+  heroContent: { width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "10px" },
+  bigLogo: { maxWidth: "95vw", maxHeight: "75vh", width: "auto", height: "auto", objectFit: "contain" },
+  heroTitle: { fontSize: "2.5em", fontWeight: "normal", margin: "10px 0 5px 0", letterSpacing: "2px", color: "#b91c1c" },
+  heroSubtitle: { fontSize: "1.2em", fontStyle: "italic", color: "#b91c1c", opacity: 0.8 },
+  contentLayer: { position: "relative", zIndex: 10, marginTop: "85vh", backgroundColor: "#f4f1ea", minHeight: "100vh", boxShadow: "0 -10px 30px rgba(185, 28, 28, 0.1)", borderTopLeftRadius: "30px", borderTopRightRadius: "30px", paddingBottom: "100px" },
   contentInner: { maxWidth: "1200px", margin: "0 auto", padding: "40px 20px" },
   actionBar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
   addButton: { padding: "10px 20px", background: "#b91c1c", color: "#fff", border: "none", borderRadius: "30px", cursor: "pointer", fontWeight: "bold" },
-  memberCount: { color: "#b91c1c", fontStyle: "italic" }, 
-  
+  memberCount: { color: "#b91c1c", fontStyle: "italic" },
   treeContainer: { background: "white", borderRadius: "10px", boxShadow: "0 5px 15px rgba(0,0,0,0.05)", padding: "20px", minHeight: "400px", overflow: "auto", border: "1px solid #e5e7eb" },
   databaseSection: { marginTop: "50px" },
   sectionTitle: { borderBottom: "2px solid #b91c1c", display: "inline-block", paddingBottom: "5px", marginBottom: "20px", color: "#b91c1c" },
