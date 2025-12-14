@@ -36,44 +36,80 @@ export default function FamilyTreeApp() {
 
   useEffect(() => { if (!loading) renderTree(); }, [people, loading]);
 
-// UPDATED: renderTree with RECTANGULAR nodes
+// UPDATED: renderTree with "Marriage Knots" for perfect alignment
   async function renderTree() {
     if (!treeRef.current || Object.keys(people).length === 0) return;
+    
+    // We use "ortho" (orthogonal) lines for neat right-angles
     let chart = `flowchart TD\n`;
     
-    // --- THE CHANGE IS IN THIS LINE ---
-    // Removed "rx:5,ry:5" to make corners sharp (rectangular) instead of rounded.
+    // STYLE DEFINITIONS
+    // 1. People: Rectangular boxes
     chart += `classDef mainNode fill:#fff,stroke:#b91c1c,stroke-width:2px,color:#000,width:150px;\n`;
-    chart += `linkStyle default stroke:#666,stroke-width:2px;\n`;
+    // 2. The Knot: A tiny black dot to represent marriage
+    chart += `classDef marriageNode width:10px,height:10px,fill:#000,stroke:none,color:transparent;\n`;
+    
+    // Set curve style to Step for neat T-shaped family lines
+    mermaid.initialize({ flowchart: { curve: 'stepAfter' } }); 
 
-    // 1. Draw Nodes
+    // 1. Draw All People Nodes First
     Object.values(people).forEach(p => {
       const safeName = p.name.replace(/"/g, "'");
-      // Made image slightly smaller and square to fit better in a rectangle box
       const imgTag = p.img_url ? `<img src='${p.img_url}' width='50' height='50' style='object-fit:cover; margin-bottom:5px;' /><br/>` : "";
       chart += `${p.id}("${imgTag}<b>${safeName}</b><br/><span style='font-size:0.8em'>${p.birth}${p.death ? ` - ${p.death}` : ""}</span>"):::mainNode\n`;
     });
 
-    // 2. Draw Spouse Links (<-->)
-    const processedSpouses = new Set();
+    // 2. Create "Marriage Knots" & Link Spouses
+    const knots = {}; // Store created knots to reuse them
+    
     Object.values(people).forEach(p => {
       if (p.spouse && people[p.spouse]) {
-        const coupleId = [p.id, p.spouse].sort().join("-");
-        if (!processedSpouses.has(coupleId)) {
-           chart += `${p.id} <--> ${p.spouse}\n`; 
-           processedSpouses.add(coupleId);
+        // Create a unique ID for the couple (sort IDs so A-B is same as B-A)
+        const coupleKey = [p.id, p.spouse].sort().join("-");
+        
+        // If we haven't processed this couple yet...
+        if (!knots[coupleKey]) {
+           const knotId = `union${coupleKey.replace(/-/g, '')}`; // e.g., unionJohnJane
+           knots[coupleKey] = knotId;
+           
+           // Draw the Knot (Small Dot)
+           chart += `${knotId}( ) :::marriageNode\n`;
+           
+           // Link Parents to the Knot: Parent1 --- Knot --- Parent2
+           chart += `${p.id} --- ${knotId} --- ${p.spouse}\n`;
         }
       }
     });
 
-    // 3. Draw Parent Links (-->)
+    // 3. Link Children to Parents (or Knots)
     Object.values(people).forEach(p => {
-      if (p.parents) {
-        p.parents.forEach(parId => {
-          if (people[parId]) chart += `${parId} --> ${p.id}\n`;
-        });
+      if (p.parents && p.parents.length > 0) {
+        let linkedToKnot = false;
+
+        // If child has exactly 2 parents, check if they are married (have a Knot)
+        if (p.parents.length === 2) {
+            const coupleKey = [...p.parents].sort().join("-");
+            if (knots[coupleKey]) {
+                // Perfect Match: Link the KNOT to the child
+                // This creates the clean "T" shape
+                chart += `${knots[coupleKey]} --> ${p.id}\n`;
+                linkedToKnot = true;
+            }
+        }
+
+        // Fallback: If parents aren't married (or single parent), link directly
+        if (!linkedToKnot) {
+            p.parents.forEach(parId => {
+               if (people[parId]) chart += `${parId} --> ${p.id}\n`;
+            });
+        }
       }
     });
+
+    treeRef.current.innerHTML = `<pre class="mermaid" style="width: 100%; height: 100%;">${chart}</pre>`;
+    try { await mermaid.run({ nodes: treeRef.current.querySelectorAll('.mermaid') }); } 
+    catch (error) { console.error("Mermaid Render Error:", error); }
+  }
 
     treeRef.current.innerHTML = `<pre class="mermaid" style="width: 100%; height: 100%;">${chart}</pre>`;
     try { await mermaid.run({ nodes: treeRef.current.querySelectorAll('.mermaid') }); } 
