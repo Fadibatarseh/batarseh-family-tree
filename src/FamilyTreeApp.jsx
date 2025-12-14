@@ -39,76 +39,90 @@ export default function FamilyTreeApp() {
 
   useEffect(() => { if (!loading) renderTree(); }, [people, loading]);
 
-// UPDATED: renderTree with "Sanitizer" to prevent syntax errors
+// UPDATED: renderTree (Aggressive Safety Mode)
   async function renderTree() {
     if (!treeRef.current || Object.keys(people).length === 0) return;
     
-    // Helper to escape characters that break Mermaid (like parens and quotes)
-    const sanitize = (text) => {
+    // 1. SAFETY FUNCTIONS
+    // Mermaid hates IDs starting with numbers. We prefix everything with "N_"
+    const safeID = (uuid) => "N_" + uuid.replace(/-/g, "_");
+    
+    // Mermaid hates line breaks and special symbols in text. We strip them.
+    const safeText = (text) => {
         if (!text) return "";
         return text.toString()
-            .replace(/"/g, "'")       // Convert double quotes to single
-            .replace(/\(/g, "#40;")   // Escape (
-            .replace(/\)/g, "#41;")   // Escape )
-            .replace(/</g, "&lt;")    // Escape <
-            .replace(/>/g, "&gt;")    // Escape >
-            .replace(/#/g, "");       // Remove # to prevent ID conflicts
+            .replace(/[\r\n]+/g, " ") // Turn 'Enter' keys into spaces
+            .replace(/[()"]/g, "")    // Delete parens and quotes entirely
+            .replace(/[']/g, "")      // Delete single quotes
+            .replace(/[#;:>]/g, "")   // Delete other code symbols
+            .trim();
     };
 
     let chart = `flowchart TD\n`;
     
-    // 1. Styles
+    // 2. Define Styles
     chart += `classDef mainNode fill:#fff,stroke:#b91c1c,stroke-width:2px,color:#000,width:150px;\n`;
     chart += `classDef marriageNode width:10px,height:10px,fill:#000,stroke:none,color:transparent;\n`;
     chart += `linkStyle default stroke:#666,stroke-width:2px;\n`;
 
-    // 2. Draw People Nodes
+    // 3. Draw People Nodes
     Object.values(people).forEach(p => {
-      // Clean ALL text fields to prevent crashes
-      const safeName = sanitize(p.name);
-      const safeBirth = sanitize(p.birth);
-      const safeDeath = sanitize(p.death);
+      const id = safeID(p.id);
+      const name = safeText(p.name);
+      const birth = safeText(p.birth);
+      const death = safeText(p.death);
       
       const imgTag = p.img_url ? `<img src='${p.img_url}' width='50' height='50' style='object-fit:cover; margin-bottom:5px;' /><br/>` : "";
       
-      // We construct the node. Note: We use the ID as is, assuming UUIDs are safe-ish, 
-      // but the Label inside ("...") must be perfectly clean.
-      chart += `${p.id}("${imgTag}<b>${safeName}</b><br/><span style='font-size:0.8em'>${safeBirth}${safeDeath ? ` - ${safeDeath}` : ""}</span>"):::mainNode\n`;
+      // We use the SAFE ID and SAFE TEXT
+      chart += `${id}("${imgTag}<b>${name}</b><br/><span style='font-size:0.8em'>${birth}${death ? ` - ${death}` : ""}</span>"):::mainNode\n`;
     });
 
-    // 3. Draw Marriage Knots
+    // 4. Draw Marriage Knots
     const knots = {}; 
     Object.values(people).forEach(p => {
       if (p.spouse && people[p.spouse]) {
+        // Sort IDs to ensure A-B is same as B-A
         const coupleKey = [p.id, p.spouse].sort().join("-");
+        
         if (!knots[coupleKey]) {
-           // We remove hyphens from the knot ID to be safe
-           const knotId = `union${coupleKey.replace(/-/g, '')}`; 
+           const knotId = `KNOT_${coupleKey.replace(/-/g, '')}`; 
            knots[coupleKey] = knotId;
+           
            chart += `${knotId}( ) :::marriageNode\n`;
-           chart += `${p.id} --- ${knotId} --- ${p.spouse}\n`;
+           // Use safeID for connections
+           chart += `${safeID(p.id)} --- ${knotId} --- ${safeID(p.spouse)}\n`;
         }
       }
     });
 
-    // 4. Link Children
+    // 5. Link Children
     Object.values(people).forEach(p => {
       if (p.parents && p.parents.length > 0) {
         let linkedToKnot = false;
+
+        // Try to link to a marriage knot first (T-Shape)
         if (p.parents.length === 2) {
             const coupleKey = [...p.parents].sort().join("-");
             if (knots[coupleKey]) {
-                chart += `${knots[coupleKey]} --> ${p.id}\n`;
+                chart += `${knots[coupleKey]} --> ${safeID(p.id)}\n`;
                 linkedToKnot = true;
             }
         }
+
+        // Fallback: Link directly to parent (Single parent or unmatched)
         if (!linkedToKnot) {
             p.parents.forEach(parId => {
-               if (people[parId]) chart += `${parId} --> ${p.id}\n`;
+               if (people[parId]) {
+                   chart += `${safeID(parId)} --> ${safeID(p.id)}\n`;
+               }
             });
         }
       }
     });
+
+    // Debugging: If it fails, you can see the exact string in the console
+    // console.log("Generated Mermaid Chart:", chart);
 
     treeRef.current.innerHTML = `<pre class="mermaid" style="width: 100%; height: 100%;">${chart}</pre>`;
     try { await mermaid.run({ nodes: treeRef.current.querySelectorAll('.mermaid') }); } 
