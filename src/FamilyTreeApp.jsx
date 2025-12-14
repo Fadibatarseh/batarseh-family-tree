@@ -37,16 +37,71 @@ export default function FamilyTreeApp() {
 
   async function renderTree() {
     if (!treeRef.current || Object.keys(people).length === 0) return;
+    
+    // Start the chart definition
     let chart = `flowchart TD\n`;
     chart += `classDef mainNode fill:#fff,stroke:#b91c1c,stroke-width:2px,rx:5,ry:5,color:#000,width:150px;\n`;
     chart += `linkStyle default stroke:#666,stroke-width:2px;\n`;
 
+    // 1. Draw Nodes (The People)
     Object.values(people).forEach(p => {
       const safeName = p.name.replace(/"/g, "'");
       const imgTag = p.img_url ? `<img src='${p.img_url}' width='60' height='60' style='border-radius:50%; object-fit:cover; margin-bottom:5px;' /><br/>` : "";
+      
+      // We add the node to the chart string
       chart += `${p.id}("${imgTag}<b>${safeName}</b><br/><span style='font-size:0.8em'>${p.birth}${p.death ? ` - ${p.death}` : ""}</span>"):::mainNode\n`;
     });
 
+    // 2. Draw Spouse Links (NEW)
+    // We use a Set to make sure we don't draw the line twice (once for husband->wife, once for wife->husband)
+    const processedSpouses = new Set();
+    
+    Object.values(people).forEach(p => {
+      if (p.spouse && people[p.spouse]) {
+        // Create a unique ID for this couple (e.g., "A-B" is the same as "B-A")
+        const coupleId = [p.id, p.spouse].sort().join("-");
+        
+        if (!processedSpouses.has(coupleId)) {
+           // Draw a double-arrow line <--> for marriage
+           chart += `${p.id} <--> ${p.spouse}\n`; 
+           processedSpouses.add(coupleId);
+        }
+      }
+    });
+
+    // 3. Draw Parent Links (Children)
+    Object.values(people).forEach(p => {
+      if (p.parents) {
+        p.parents.forEach(parId => {
+          if (people[parId]) {
+            // Draw arrow from Parent --> Child
+            chart += `${parId} --> ${p.id}\n`;
+          }
+        });
+      }
+    });
+
+    // Render the chart into the HTML
+    treeRef.current.innerHTML = `<pre class="mermaid" style="width: 100%; height: 100%;">${chart}</pre>`;
+    try { 
+        await mermaid.run({ nodes: treeRef.current.querySelectorAll('.mermaid') }); 
+    } catch (error) { 
+        console.error("Mermaid Render Error:", error); 
+    }
+  }
+<label style={styles.label}>Spouse (Optional)</label>
+            <select 
+                value={form.spouse || ""} 
+                onChange={e => setForm({ ...form, spouse: e.target.value })} 
+                style={styles.input}
+            >
+                <option value="">No Spouse / Unknown</option>
+                {Object.values(people)
+                    .filter(p => p.id !== currentEdit) // Don't let them marry themselves!
+                    .map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+            </select>
     Object.values(people).forEach(p => {
       if (p.parents) {
         p.parents.forEach(parId => {
@@ -90,7 +145,8 @@ export default function FamilyTreeApp() {
       birth: form.birth || null, 
       death: form.death || null, 
       img_url: form.img_url || null, 
-      parents: form.parents || [] // Ensure parents is always an array
+      parents: form.parents || [] // Ensure parents is always an array,
+      spouse: form.spouse || null //
     };
 
     try {
