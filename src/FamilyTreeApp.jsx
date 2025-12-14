@@ -110,6 +110,19 @@ export default function FamilyTreeApp() {
     try { await mermaid.run({ nodes: treeRef.current.querySelectorAll('.mermaid') }); } 
     catch (error) { console.error("Mermaid Render Error:", error); }
   }
+        // Fallback: If parents aren't married (or single parent), link directly
+        if (!linkedToKnot) {
+            p.parents.forEach(parId => {
+               if (people[parId]) chart += `${parId} --> ${p.id}\n`;
+            });
+        }
+      }
+    });
+
+    treeRef.current.innerHTML = `<pre class="mermaid" style="width: 100%; height: 100%;">${chart}</pre>`;
+    try { await mermaid.run({ nodes: treeRef.current.querySelectorAll('.mermaid') }); } 
+    catch (error) { console.error("Mermaid Render Error:", error); }
+  }
 
     treeRef.current.innerHTML = `<pre class="mermaid" style="width: 100%; height: 100%;">${chart}</pre>`;
     try { await mermaid.run({ nodes: treeRef.current.querySelectorAll('.mermaid') }); } 
