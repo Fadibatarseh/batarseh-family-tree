@@ -80,55 +80,98 @@ export default function FamilyTreeApp() {
     if (!loading) renderTree();
   }, [people, loading]);
 
-  async function renderTree() {
+ async function renderTree() {
     if (!treeRef.current) return;
 
     let chart = "flowchart TD\n";
-    chart += "classDef main fill:#fff,stroke:#b91c1c,stroke-width:2px,cursor:pointer;\n";
-    chart += "classDef knot width:0,height:0,fill:none,stroke:none;\n";
+    
+    // 1. STYLES
+    // Main Node: The Person
+    chart += "classDef main fill:#fff,stroke:#b91c1c,stroke-width:2px,cursor:pointer,rx:5,ry:5;\n";
+    // Family Node: A tiny invisible dot that connects parents and children
+    chart += "classDef familyNode width:0px,height:0px,padding:0px,stroke:none,fill:#000;\n";
+    // Link Styles: Smooth curves
+    chart += "linkStyle default stroke:#666,stroke-width:2px,fill:none;\n";
 
-    const knots = {};
-
-    // 1. Draw Nodes & Add Clicks
+    // 2. DRAW PEOPLE (The Nodes)
     Object.values(people).forEach((p) => {
+      // Draw the person
       chart += `${safeID(p.id)}("${safeText(p.name)}<br/>${safeText(p.birth)}${
         p.death ? " - " + safeText(p.death) : ""
       }"):::main\n`;
       
-      // CLICK EVENT: This connects the box to the 'openEdit' function
+      // Add Click Event
       chart += `click ${safeID(p.id)} call window.onNodeClick("${p.id}")\n`;
     });
 
-    // 2. Draw Marriages
-    Object.values(people).forEach((p) => {
-      if (p.spouse && people[p.spouse]) {
-        const pair = [p.id, p.spouse].sort();
-        const key = pair.join("_");
-        if (!knots[key]) {
-          knots[key] = `KNOT_${key}`;
-          chart += `${safeID(pair[0])} --- ${knots[key]} --- ${safeID(pair[1])}\n`;
-          chart += `${knots[key]}{ }:::knot\n`;
+    // 3. DRAW RELATIONSHIPS (The Family Hub Method)
+    // We group children by their parent pairs to create "Family Nodes"
+    const families = {};
+
+    Object.values(people).forEach((child) => {
+      if (child.parents && child.parents.length > 0) {
+        // Create a unique key for the parents (e.g., "MOM_ID+DAD_ID")
+        // If single parent, just "MOM_ID"
+        const parentsKey = [...child.parents].sort().join("_X_");
+        
+        if (!families[parentsKey]) {
+            families[parentsKey] = {
+                id: `FAM_${parentsKey}`, // The invisible dot ID
+                parents: child.parents,
+                children: []
+            };
         }
+        families[parentsKey].children.push(child.id);
       }
     });
 
-    // 3. Link Children
-    Object.values(people).forEach((p) => {
-      if (p.parents?.length === 2) {
-        const key = [...p.parents].sort().join("_");
-        if (knots[key]) {
-          chart += `${knots[key]} --> ${safeID(p.id)}\n`;
-          return;
+    // 4. GENERATE THE LINES
+    Object.values(families).forEach((fam) => {
+        // Draw the invisible Family Dot
+        chart += `${fam.id}[ ]:::familyNode\n`; // [ ] is an empty label
+
+        // Link Parents -> Family Dot
+        fam.parents.forEach(parentId => {
+            if (people[parentId]) {
+                chart += `${safeID(parentId)} --- ${fam.id}\n`;
+            }
+        });
+
+        // Link Family Dot -> Children
+        fam.children.forEach(childId => {
+            chart += `${fam.id} --> ${safeID(childId)}\n`;
+        });
+    });
+
+    // 5. HANDLE "CHILDLESS COUPLES" (Spouses with no kids yet)
+    // We manually check for spouses who aren't in the 'families' list above
+    const processedSpouses = new Set();
+    Object.values(people).forEach(p => {
+        if(p.spouse && people[p.spouse]) {
+            const p1 = p.id;
+            const p2 = p.spouse;
+            const pairKey = [p1, p2].sort().join("_X_");
+            
+            // If this couple hasn't been processed via children logic above
+            if (!families[pairKey] && !processedSpouses.has(pairKey)) {
+                const famId = `FAM_COUPLE_${pairKey}`;
+                // Draw invisible connector
+                chart += `${famId}[ ]:::familyNode\n`;
+                // Link both to connector
+                chart += `${safeID(p1)} --- ${famId} --- ${safeID(p2)}\n`;
+                
+                processedSpouses.add(pairKey);
+            }
         }
-      }
-      p.parents?.forEach((pid) => {
-        if (people[pid]) chart += `${safeID(pid)} --> ${safeID(p.id)}\n`;
-      });
     });
 
     treeRef.current.innerHTML = `<pre class="mermaid">${chart}</pre>`;
-    await mermaid.run({ nodes: treeRef.current.querySelectorAll(".mermaid") });
-    applyTransform();
+    try {
+        await mermaid.run({ nodes: treeRef.current.querySelectorAll(".mermaid") });
+        applyTransform();
+    } catch (e) {
+        console.error("Mermaid Render Error", e);
+    }
   }
 
   /* ------------------------- PAN / ZOOM LOGIC ------------------------- */
