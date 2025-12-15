@@ -200,11 +200,10 @@ async function uploadImage(file, personId) {
   return data.publicUrl;
 }
 
- async function save() {
+async function save() {
   try {
     let savedId = currentEdit;
 
-    // A. CREATE OR UPDATE PERSON (WITHOUT IMAGE FIRST)
     if (currentEdit) {
       await supabase
         .from("family_members")
@@ -234,32 +233,12 @@ async function uploadImage(file, personId) {
       savedId = data[0].id;
     }
 
-    // B. UPLOAD IMAGE (IF PROVIDED)
     if (imageFile && savedId) {
       const imageUrl = await uploadImage(imageFile, savedId);
-
       await supabase
         .from("family_members")
         .update({ img_url: imageUrl })
         .eq("id", savedId);
-    }
-
-    // C. UPDATE CHILD LINKS (REVERSE RELATIONSHIP)
-    for (const child of Object.values(people)) {
-      const parents = child.parents || [];
-      const hasParent = parents.includes(savedId);
-      const shouldHave = selectedChildren.includes(child.id);
-
-      if (hasParent !== shouldHave) {
-        const newParents = shouldHave
-          ? [...parents, savedId]
-          : parents.filter((p) => p !== savedId);
-
-        await supabase
-          .from("family_members")
-          .update({ parents: newParents })
-          .eq("id", child.id);
-      }
     }
 
     setModalOpen(false);
@@ -270,91 +249,93 @@ async function uploadImage(file, personId) {
 }
 
 
-    setModalOpen(false);
-    fetchPeople();
-  }
-
   /* ------------------------- UI ------------------------- */
-  return (
-   <div style={styles.modalBox}>
-  <h3 style={{ margin: "0 0 20px 0" }}>
-    {currentEdit ? "Edit Profile" : "Add New Member"}
-  </h3>
+return (
+  <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+    {/* HEADER */}
+    <header style={{ padding: "10px 20px", borderBottom: "1px solid #ddd" }}>
+      <img src={logo} alt="Logo" height={40} />
+      <button onClick={openAdd} style={{ marginLeft: 20 }}>
+        ➕ Add Member
+      </button>
+    </header>
 
-  <label style={styles.label}>Full Name</label>
-  <input
-    value={form.name}
-    onChange={(e) => setForm({ ...form, name: e.target.value })}
-    style={styles.input}
-  />
-
-  <div style={{ display: "flex", gap: "10px" }}>
-    <div style={{ flex: 1 }}>
-      <label style={styles.label}>Birth Year</label>
-      <input
-        value={form.birth}
-        onChange={(e) => setForm({ ...form, birth: e.target.value })}
-        style={styles.input}
-      />
-    </div>
-    <div style={{ flex: 1 }}>
-      <label style={styles.label}>Death Year</label>
-      <input
-        value={form.death}
-        onChange={(e) => setForm({ ...form, death: e.target.value })}
-        style={styles.input}
-      />
-    </div>
-  </div>
-
-  {/* IMAGE UPLOAD */}
-  <label style={styles.label}>Upload Photo</label>
-  <input
-    type="file"
-    accept="image/*"
-    onChange={(e) => setImageFile(e.target.files[0])}
-  />
-
-  {form.img_url && (
-    <img
-      src={form.img_url}
-      alt="Preview"
+    {/* TREE VIEW */}
+    <div
+      ref={viewportRef}
+      onWheel={onWheel}
+      onMouseMove={onDrag}
       style={{
-        width: 80,
-        height: 80,
-        objectFit: "cover",
-        borderRadius: "8px",
-        marginTop: "10px",
+        flex: 1,
+        overflow: "hidden",
+        cursor: "grab",
+        background: "#fafafa",
       }}
-    />
-  )}
-
-  <label style={styles.label}>Spouse</label>
-  <select
-    value={form.spouse || ""}
-    onChange={(e) => setForm({ ...form, spouse: e.target.value })}
-    style={styles.input}
-  >
-    <option value="">No Spouse</option>
-    {Object.values(people)
-      .filter((p) => p.id !== currentEdit)
-      .map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.name}
-        </option>
-      ))}
-  </select>
-
-  <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
-    <button onClick={save} style={styles.saveButton}>
-      Save
-    </button>
-    <button
-      onClick={() => setModalOpen(false)}
-      style={styles.cancelButton}
     >
-      Cancel
-    </button>
+      <div ref={treeRef} />
+    </div>
+
+    {/* MODAL */}
+    {modalOpen && (
+      <div style={styles.modalOverlay}>
+        <div style={styles.modalBox}>
+          <h3>{currentEdit ? "Edit Profile" : "Add New Member"}</h3>
+
+          <label style={styles.label}>Full Name</label>
+          <input
+            value={form.name}
+            onChange={(e) =>
+              setForm({ ...form, name: e.target.value })
+            }
+            style={styles.input}
+          />
+
+          <label style={styles.label}>Birth Year</label>
+          <input
+            value={form.birth}
+            onChange={(e) =>
+              setForm({ ...form, birth: e.target.value })
+            }
+            style={styles.input}
+          />
+
+          <label style={styles.label}>Death Year</label>
+          <input
+            value={form.death}
+            onChange={(e) =>
+              setForm({ ...form, death: e.target.value })
+            }
+            style={styles.input}
+          />
+
+          <label style={styles.label}>Upload Photo</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setImageFile(e.target.files[0])}
+          />
+
+          {form.img_url && (
+            <img
+              src={form.img_url}
+              alt="Preview"
+              style={{
+                width: 80,
+                height: 80,
+                objectFit: "cover",
+                marginTop: 10,
+              }}
+            />
+          )}
+
+          <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
+            <button onClick={save}>Save</button>
+            <button onClick={() => setModalOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>
-</div>
-)}
+);
