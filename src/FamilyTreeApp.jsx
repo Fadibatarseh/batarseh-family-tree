@@ -173,6 +173,28 @@ export default function FamilyTreeApp() {
     );
     setModalOpen(true);
   }
+  
+async function uploadImage(file, personId) {
+  if (!file) return null;
+
+  const fileExt = file.name.split('.').pop();
+  const filePath = `person-${personId}.${fileExt}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("family-photos")
+    .upload(filePath, file, { upsert: true });
+
+  if (uploadError) {
+    alert("Image upload failed");
+    throw uploadError;
+  }
+
+  const { data } = supabase.storage
+    .from("family-photos")
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+}
 
   async function save() {
     let id = currentEdit;
