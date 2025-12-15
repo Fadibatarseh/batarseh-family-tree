@@ -357,3 +357,4 @@ async function uploadImage(file, personId) {
     </button>
   </div>
 </div>
+)}
