@@ -85,7 +85,7 @@ export default function FamilyTreeApp() {
     if (!loading) renderTree();
   }, [people, loading]);
 
- async function renderTree() {
+async function renderTree() {
     if (!treeRef.current) return;
 
     let chart = "flowchart TD\n";
@@ -93,8 +93,7 @@ export default function FamilyTreeApp() {
     // 1. STYLES
     chart += "classDef main fill:#fff,stroke:#b91c1c,stroke-width:2px,cursor:pointer,rx:5,ry:5;\n";
     chart += "classDef familyNode width:0px,height:0px,padding:0px,stroke:none,fill:#000;\n";
-    // We make links gray and squared off
-    chart += "linkStyle default stroke:#888,stroke-width:2px,fill:none;\n"; 
+    chart += "linkStyle default stroke:#888,stroke-width:2px,fill:none;\n";
 
     // 2. DRAW PEOPLE
     Object.values(people).forEach((p) => {
@@ -129,13 +128,20 @@ export default function FamilyTreeApp() {
         // 1. Draw the Invisible Hub
         chart += `${fam.id}[ ]:::familyNode\n`; 
 
-        // 2. FORCE PROXIMITY (The Ghost Link)
-        // This invisible link (~~~) pulls parents together so they don't drift apart
+        // 2. FORCE PROXIMITY (The Subgraph Fix)
+        // We wrap the parents in a subgraph so they stay on the same level
         if (fam.parents.length === 2) {
              const p1 = fam.parents[0];
              const p2 = fam.parents[1];
              if (people[p1] && people[p2]) {
-                 chart += `${safeID(p1)} ~~~ ${safeID(p2)}\n`; 
+                 // Create a unique ID for the subgraph box
+                 const subGraphId = `SG_${p1}_${p2}`.replace(/[^a-zA-Z0-9]/g, "_");
+                 
+                 chart += `subgraph ${subGraphId}\n`;
+                 chart += `direction LR\n`; // Forces them side-by-side inside the box
+                 chart += `style ${subGraphId} fill:none,stroke:none\n`; // Make the box invisible
+                 chart += `${safeID(p1)} ~~~ ${safeID(p2)}\n`; // The ghost link
+                 chart += `end\n`;
              }
         }
 
@@ -168,9 +174,15 @@ export default function FamilyTreeApp() {
                 
                 // Invisible Hub
                 chart += `${famId}[ ]:::familyNode\n`;
-                
-                // Ghost Link to keep them close
-                chart += `${safeID(p.id)} ~~~ ${safeID(p.spouse)}\n`;
+
+                // --- THE FIX: WRAP IN SUBGRAPH ---
+                const subGraphId = `SG_COUPLE_${pairKey}`.replace(/[^a-zA-Z0-9]/g, "_");
+                chart += `subgraph ${subGraphId}\n`;
+                chart += `direction LR\n`;
+                chart += `style ${subGraphId} fill:none,stroke:none\n`;
+                chart += `${safeID(p.id)} ~~~ ${safeID(p.spouse)}\n`; // Ghost Link
+                chart += `end\n`;
+                // ----------------------------------
                 
                 // Visible Connection through Hub
                 chart += `${safeID(p.id)} --- ${famId} --- ${safeID(p.spouse)}\n`;
@@ -188,7 +200,7 @@ export default function FamilyTreeApp() {
     } catch (e) {
         console.error("Mermaid Render Error", e);
     }
-  }
+}
 
   /* ------------------------- PAN / ZOOM LOGIC ------------------------- */
   function applyTransform() {
