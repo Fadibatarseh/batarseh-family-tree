@@ -163,7 +163,6 @@ async function renderTree() {
                  chart += `subgraph ${subGraphId} ["&#160;"]\n`; 
                  
                  chart += `direction LR\n`; 
-                 // Hide the border of the subgraph
                  chart += `style ${subGraphId} fill:none,stroke:none\n`; 
                  
                  chart += `${safeID(p1)} ~~~ ${safeID(p2)}\n`; 
@@ -204,7 +203,6 @@ async function renderTree() {
                 chart += `subgraph ${subGraphId} ["&#160;"]\n`; 
 
                 chart += `direction LR\n`;
-                // Hide the border
                 chart += `style ${subGraphId} fill:none,stroke:none\n`;
                 
                 chart += `${safeID(p.id)} ~~~ ${safeID(p.spouse)}\n`; 
