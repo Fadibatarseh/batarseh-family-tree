@@ -109,7 +109,7 @@ export default function FamilyTreeApp() {
   }
 
   /* ------------------------- RENDER TREE ------------------------- */
- async function renderTree() {
+async function renderTree() {
     if (!treeRef.current) return;
 
     let chart = "flowchart TD\n";
@@ -159,13 +159,12 @@ export default function FamilyTreeApp() {
              if (people[p1] && people[p2]) {
                  const subGraphId = `SG_${p1}_${p2}`.replace(/[^a-zA-Z0-9]/g, "_");
                  
-                 // REVERTED: Just use the ID, no brackets
-                 chart += `subgraph ${subGraphId}\n`; 
+                 // FIX 1: Use HTML Entity code for space (&#160;) to hide title safely
+                 chart += `subgraph ${subGraphId} ["&#160;"]\n`; 
                  
                  chart += `direction LR\n`; 
-                 
-                 // FIX: Added 'color:#fafafa' to hide the text against the background
-                 chart += `style ${subGraphId} fill:none,stroke:none,color:#fafafa\n`; 
+                 // Hide the border of the subgraph
+                 chart += `style ${subGraphId} fill:none,stroke:none\n`; 
                  
                  chart += `${safeID(p1)} ~~~ ${safeID(p2)}\n`; 
                  chart += `end\n`;
@@ -201,13 +200,12 @@ export default function FamilyTreeApp() {
 
                 const subGraphId = `SG_COUPLE_${pairKey}`.replace(/[^a-zA-Z0-9]/g, "_");
                 
-                // REVERTED: Just use the ID, no brackets
-                chart += `subgraph ${subGraphId}\n`; 
+                // FIX 2: Use HTML Entity code for space (&#160;) here as well
+                chart += `subgraph ${subGraphId} ["&#160;"]\n`; 
 
                 chart += `direction LR\n`;
-                
-                // FIX: Added 'color:#fafafa' to hide the text against the background
-                chart += `style ${subGraphId} fill:none,stroke:none,color:#fafafa\n`;
+                // Hide the border
+                chart += `style ${subGraphId} fill:none,stroke:none\n`;
                 
                 chart += `${safeID(p.id)} ~~~ ${safeID(p.spouse)}\n`; 
                 chart += `end\n`;
