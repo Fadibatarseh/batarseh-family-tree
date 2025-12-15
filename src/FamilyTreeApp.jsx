@@ -109,11 +109,7 @@ export default function FamilyTreeApp() {
   }
 
   /* ------------------------- RENDER TREE ------------------------- */
-  useEffect(() => {
-    if (!loading) renderTree();
-  }, [people, loading]);
-
- async function renderTree() {
+  async function renderTree() {
     if (!treeRef.current) return;
 
     let chart = "flowchart TD\n";
@@ -162,7 +158,11 @@ export default function FamilyTreeApp() {
              const p2 = fam.parents[1];
              if (people[p1] && people[p2]) {
                  const subGraphId = `SG_${p1}_${p2}`.replace(/[^a-zA-Z0-9]/g, "_");
-                 chart += `subgraph ${subGraphId}\n`;
+                 
+                 // --- FIX 1: Add [" "] to hide the title ---
+                 chart += `subgraph ${subGraphId} [" "]\n`;
+                 // ------------------------------------------
+
                  chart += `direction LR\n`; 
                  chart += `style ${subGraphId} fill:none,stroke:none\n`; 
                  chart += `${safeID(p1)} ~~~ ${safeID(p2)}\n`; 
@@ -198,7 +198,11 @@ export default function FamilyTreeApp() {
                 chart += `${famId}[ ]:::familyNode\n`;
 
                 const subGraphId = `SG_COUPLE_${pairKey}`.replace(/[^a-zA-Z0-9]/g, "_");
-                chart += `subgraph ${subGraphId}\n`;
+                
+                // --- FIX 2: Add [" "] to hide the title ---
+                chart += `subgraph ${subGraphId} [" "]\n`;
+                // ------------------------------------------
+
                 chart += `direction LR\n`;
                 chart += `style ${subGraphId} fill:none,stroke:none\n`;
                 chart += `${safeID(p.id)} ~~~ ${safeID(p.spouse)}\n`; 
@@ -218,7 +222,7 @@ export default function FamilyTreeApp() {
     } catch (e) {
         console.error("Mermaid Render Error", e);
     }
-  }
+}
 
   /* ------------------------- PAN / ZOOM LOGIC ------------------------- */
   function applyTransform() {
