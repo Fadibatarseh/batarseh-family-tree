@@ -12,12 +12,12 @@ export default function FamilyTreeApp() {
   /* ------------------------- DATA STATE ------------------------- */
   const [people, setPeople] = useState({});
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState(""); // Search Bar State
+  const [searchTerm, setSearchTerm] = useState(""); 
 
   /* ------------------------- MODAL STATE ------------------------- */
   const [modalOpen, setModalOpen] = useState(false);
   const [currentEdit, setCurrentEdit] = useState(null);
-  const [activeTab, setActiveTab] = useState("parents"); // Tabs: "parents" or "children"
+  const [activeTab, setActiveTab] = useState("parents"); 
 
   const [form, setForm] = useState({
     name: "",
@@ -29,7 +29,7 @@ export default function FamilyTreeApp() {
   });
 
   const [imageFile, setImageFile] = useState(null);
-  const [selectedChildren, setSelectedChildren] = useState([]); // Track children links
+  const [selectedChildren, setSelectedChildren] = useState([]); 
 
   /* ------------------------- REFS ------------------------- */
   const treeRef = useRef(null);
@@ -48,7 +48,7 @@ export default function FamilyTreeApp() {
       startOnLoad: false,
       securityLevel: "loose",
       theme: "base",
-      flowchart: { curve: "stepAfter", nodeSpacing: 80, rankSpacing: 120 },
+      flowchart: { curve: "basis" }, // 'basis' creates smoother curves for family trees
     });
   }, []);
 
@@ -76,43 +76,45 @@ export default function FamilyTreeApp() {
   }
 
   /* ------------------------- RENDER TREE ------------------------- */
- async function renderTree() {
+  useEffect(() => {
+    if (!loading) renderTree();
+  }, [people, loading]);
+
+  // THIS IS THE FUNCTION THAT WAS CAUSING ERRORS. 
+  // IT IS NOW FIXED WITH THE 'async' KEYWORD AND NEW LOGIC.
+  async function renderTree() {
     if (!treeRef.current) return;
 
     let chart = "flowchart TD\n";
     
     // 1. STYLES
-    // Main Node: The Person
     chart += "classDef main fill:#fff,stroke:#b91c1c,stroke-width:2px,cursor:pointer,rx:5,ry:5;\n";
-    // Family Node: A tiny invisible dot that connects parents and children
+    // Invisible connector for marriages/families
     chart += "classDef familyNode width:0px,height:0px,padding:0px,stroke:none,fill:#000;\n";
-    // Link Styles: Smooth curves
     chart += "linkStyle default stroke:#666,stroke-width:2px,fill:none;\n";
 
-    // 2. DRAW PEOPLE (The Nodes)
+    // 2. DRAW PEOPLE NODES
     Object.values(people).forEach((p) => {
-      // Draw the person
       chart += `${safeID(p.id)}("${safeText(p.name)}<br/>${safeText(p.birth)}${
         p.death ? " - " + safeText(p.death) : ""
       }"):::main\n`;
       
-      // Add Click Event
+      // Click Event
       chart += `click ${safeID(p.id)} call window.onNodeClick("${p.id}")\n`;
     });
 
-    // 3. DRAW RELATIONSHIPS (The Family Hub Method)
-    // We group children by their parent pairs to create "Family Nodes"
+    // 3. DRAW RELATIONSHIPS (The "Family Hub" Strategy)
     const families = {};
+    const processedSpouses = new Set();
 
+    // A. Group children by their parents
     Object.values(people).forEach((child) => {
       if (child.parents && child.parents.length > 0) {
-        // Create a unique key for the parents (e.g., "MOM_ID+DAD_ID")
-        // If single parent, just "MOM_ID"
         const parentsKey = [...child.parents].sort().join("_X_");
         
         if (!families[parentsKey]) {
             families[parentsKey] = {
-                id: `FAM_${parentsKey}`, // The invisible dot ID
+                id: `FAM_${parentsKey}`, 
                 parents: child.parents,
                 children: []
             };
@@ -121,56 +123,47 @@ export default function FamilyTreeApp() {
       }
     });
 
-    // 4. GENERATE THE LINES
+    // B. Draw lines for families with children
     Object.values(families).forEach((fam) => {
-        // Draw the invisible Family Dot
-        chart += `${fam.id}[ ]:::familyNode\n`; // [ ] is an empty label
+        // Draw invisible hub
+        chart += `${fam.id}[ ]:::familyNode\n`; 
 
-        // Link Parents -> Family Dot
+        // Link Parents -> Hub
         fam.parents.forEach(parentId => {
             if (people[parentId]) {
                 chart += `${safeID(parentId)} --- ${fam.id}\n`;
             }
         });
 
-        // Link Family Dot -> Children
+        // Link Hub -> Children
         fam.children.forEach(childId => {
             chart += `${fam.id} --> ${safeID(childId)}\n`;
         });
+        
+        // Mark these parents as "processed" so we don't draw duplicate spouse lines below
+        if (fam.parents.length === 2) {
+            const pairKey = [...fam.parents].sort().join("_X_");
+            processedSpouses.add(pairKey);
+        }
     });
 
-    // 5. HANDLE "CHILDLESS COUPLES" (Spouses with no kids yet)
-    // We manually check for spouses who aren't in the 'families' list above
-    const processedSpouses = new Set();
+    // C. Draw lines for Spouses with NO children (yet)
     Object.values(people).forEach(p => {
         if(p.spouse && people[p.spouse]) {
-            const p1 = p.id;
-            const p2 = p.spouse;
-            const pairKey = [p1, p2].sort().join("_X_");
+            const pairKey = [p.id, p.spouse].sort().join("_X_");
             
-            // If this couple hasn't been processed via children logic above
-            if (!families[pairKey] && !processedSpouses.has(pairKey)) {
+            // Only draw if we haven't already drawn a family hub for them above
+            if (!processedSpouses.has(pairKey)) {
                 const famId = `FAM_COUPLE_${pairKey}`;
-                // Draw invisible connector
                 chart += `${famId}[ ]:::familyNode\n`;
-                // Link both to connector
-                chart += `${safeID(p1)} --- ${famId} --- ${safeID(p2)}\n`;
-                
+                chart += `${safeID(p.id)} --- ${famId} --- ${safeID(p.spouse)}\n`;
                 processedSpouses.add(pairKey);
             }
         }
     });
 
     treeRef.current.innerHTML = `<pre class="mermaid">${chart}</pre>`;
-    try {
-        await mermaid.run({ nodes: treeRef.current.querySelectorAll(".mermaid") });
-        applyTransform();
-    } catch (e) {
-        console.error("Mermaid Render Error", e);
-    }
-  }
-
-    treeRef.current.innerHTML = `<pre class="mermaid">${chart}</pre>`;
+    
     try {
         await mermaid.run({ nodes: treeRef.current.querySelectorAll(".mermaid") });
         applyTransform();
@@ -189,7 +182,6 @@ export default function FamilyTreeApp() {
     localStorage.setItem("tree_view", JSON.stringify(panZoom.current));
   }
 
-  // Handle Zoom (Mouse Wheel)
   function onWheel(e) {
     e.preventDefault();
     const zoomSpeed = 0.001;
@@ -198,7 +190,6 @@ export default function FamilyTreeApp() {
     applyTransform();
   }
 
-  // Handle Drag Start
   function startDrag(e) {
     isDragging.current = true;
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -206,11 +197,8 @@ export default function FamilyTreeApp() {
     lastMouse.current = { x: clientX, y: clientY };
   }
 
-  // Handle Drag Move (Mouse + Touch)
   function onDrag(e) {
     if (!isDragging.current) return;
-    
-    // Prevent default scrolling on mobile to allow dragging
     if(e.touches) e.preventDefault(); 
 
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -238,7 +226,7 @@ export default function FamilyTreeApp() {
     setImageFile(null);
     setActiveTab("parents");
     setModalOpen(true);
-    setSearchTerm(""); // Close search results
+    setSearchTerm(""); 
   }
 
   function openEdit(id) {
@@ -246,7 +234,6 @@ export default function FamilyTreeApp() {
     setCurrentEdit(id);
     setForm({ ...p, parents: p.parents || [], spouse: p.spouse || "" });
     
-    // Find children
     setSelectedChildren(
       Object.values(people)
         .filter((c) => c.parents?.includes(id))
@@ -256,10 +243,9 @@ export default function FamilyTreeApp() {
     setImageFile(null);
     setActiveTab("parents");
     setModalOpen(true);
-    setSearchTerm(""); // Close search results
+    setSearchTerm(""); 
   }
 
-  // Handle Checkboxes
   function toggleParent(pid) {
     const current = form.parents || [];
     setForm({
@@ -286,12 +272,10 @@ export default function FamilyTreeApp() {
     return data.publicUrl;
   }
 
-  // --- SAVE FUNCTION (UPDATED) ---
   async function save() {
     try {
       let savedId = currentEdit;
       
-      // 1. Save Main Person
       const personData = {
         name: form.name,
         birth: form.birth || null,
@@ -308,13 +292,11 @@ export default function FamilyTreeApp() {
         savedId = data[0].id;
       }
 
-      // 2. Upload Image
       if (imageFile && savedId) {
         const imageUrl = await uploadImage(imageFile, savedId);
         await supabase.from("family_members").update({ img_url: imageUrl }).eq("id", savedId);
       }
 
-      // 3. Update Children (Bi-directional Link)
       const allPeople = Object.values(people).filter(p => p.id !== savedId);
       
       for (const child of allPeople) {
@@ -340,12 +322,11 @@ export default function FamilyTreeApp() {
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "sans-serif" }}>
       
-      {/* HEADER BAR */}
+      {/* HEADER */}
       <header style={styles.header}>
         <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
           <img src={logo} alt="Logo" height={40} />
           
-          {/* SEARCH BAR */}
           <div style={{ position: "relative" }}>
             <input
               placeholder="Search family..."
@@ -353,7 +334,6 @@ export default function FamilyTreeApp() {
               onChange={(e) => setSearchTerm(e.target.value)}
               style={styles.searchInput}
             />
-            {/* SEARCH RESULTS DROPDOWN */}
             {searchTerm && (
                 <div style={styles.searchResults}>
                     {Object.values(people)
@@ -373,14 +353,12 @@ export default function FamilyTreeApp() {
         </div>
 
         <div style={{ display: "flex", gap: "10px" }}>
-           {/* REFOCUS BUTTON */}
            <button 
              onClick={() => { panZoom.current = { x: 0, y: 0, scale: 1 }; applyTransform(); }} 
              style={styles.secondaryBtn}
            >
              Refocus View
            </button>
-
            <button onClick={openAdd} style={styles.primaryBtn}>
              + Add Member
            </button>
@@ -395,9 +373,9 @@ export default function FamilyTreeApp() {
         onMouseMove={onDrag}
         onMouseUp={stopDrag}
         onMouseLeave={stopDrag}
-        onTouchStart={startDrag} // Mobile Touch
-        onTouchMove={onDrag}     // Mobile Touch
-        onTouchEnd={stopDrag}    // Mobile Touch
+        onTouchStart={startDrag} 
+        onTouchMove={onDrag}     
+        onTouchEnd={stopDrag}    
         style={styles.viewport}
       >
         <div ref={treeRef} style={{ transformOrigin: "0 0" }} />
@@ -459,7 +437,6 @@ export default function FamilyTreeApp() {
               <img src={form.img_url} alt="Preview" style={styles.previewImg} />
             )}
 
-            {/* --- RELATIVES TABS --- */}
             <div style={styles.tabHeader}>
                 <button style={activeTab === "parents" ? styles.activeTab : styles.tab} onClick={() => setActiveTab("parents")}>
                     Select Parents
@@ -470,7 +447,6 @@ export default function FamilyTreeApp() {
             </div>
 
             <div style={styles.listContainer}>
-                {/* PARENT LIST */}
                 {activeTab === "parents" && Object.values(people).filter(p => p.id !== currentEdit).map(p => (
                      <div key={p.id} style={styles.checkboxRow}>
                        <input 
@@ -483,7 +459,6 @@ export default function FamilyTreeApp() {
                      </div>
                 ))}
 
-                {/* CHILDREN LIST */}
                 {activeTab === "children" && Object.values(people).filter(p => p.id !== currentEdit).map(p => (
                      <div key={p.id} style={styles.checkboxRow}>
                        <input 
@@ -522,8 +497,6 @@ const styles = {
     primaryBtn: { padding: "10px 20px", background: "#b91c1c", color: "#fff", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" },
     secondaryBtn: { padding: "10px 20px", background: "#eee", color: "#333", border: "none", borderRadius: "5px", cursor: "pointer" },
     previewImg: { width: 80, height: 80, objectFit: "cover", borderRadius: "5px", marginTop: 5 },
-    
-    // Tabs
     tabHeader: { display: "flex", gap: "5px", marginTop: "15px", borderBottom: "1px solid #ccc" },
     tab: { flex: 1, padding: "8px", cursor: "pointer", background: "#f9f9f9", border: "1px solid #ccc", borderBottom: "none", borderRadius: "5px 5px 0 0", color: "#666" },
     activeTab: { flex: 1, padding: "8px", cursor: "pointer", background: "#fff", border: "1px solid #b91c1c", borderBottom: "1px solid #fff", borderRadius: "5px 5px 0 0", fontWeight: "bold", color: "#b91c1c", marginBottom: "-1px" },
