@@ -107,7 +107,13 @@ export default function FamilyTreeApp() {
     }
     setLoading(false);
   }
-
+/* ------------------------- TRIGGER RENDER ------------------------- */
+  // This was missing! It tells React: "When 'people' changes, draw the tree."
+  useEffect(() => {
+    if (people && Object.keys(people).length > 0) {
+      renderTree();
+    }
+  }, [people]);
   /* ------------------------- RENDER TREE ------------------------- */
 async function renderTree() {
     if (!treeRef.current) return;
