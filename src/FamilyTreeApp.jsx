@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import mermaid from "mermaid";
+import * as d3 from "d3";
 import { supabase } from "./supabaseClient";
 import logo from "./logo.png";
 
