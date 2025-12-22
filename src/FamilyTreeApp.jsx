@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from "react";
-import mermaid from "mermaid";
 import * as d3 from "d3";
 import { supabase } from "./supabaseClient";
 import logo from "./logo.png";
@@ -44,18 +43,7 @@ export default function FamilyTreeApp() {
   const lastMouse = useRef({ x: 0, y: 0 });
 
   /* ------------------------- INITIALIZATION ------------------------- */
-  useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "loose",
-      theme: "base",
-      flowchart: { 
-          curve: "stepAfter",
-          nodeSpacing: 50,    
-          rankSpacing: 80,    
-      }, 
-    });
-  }, []);
+ 
 
   // Make nodes clickable globally
   useEffect(() => {
@@ -119,90 +107,169 @@ export default function FamilyTreeApp() {
 async function renderTree() {
   if (!treeRef.current) return;
 
-  let chart = "flowchart TD\n";
+  treeRef.current.innerHTML = "";
 
-  /* ---------- STYLES ---------- */
-  chart += "classDef person fill:#fff,stroke:#b91c1c,stroke-width:2px;\n";
-  chart += "classDef marriage fill:none,stroke:none,width:0,height:0;\n";
+  const width = 5000;
+  const height = 3000;
+  const nodeWidth = 160;
+  const nodeHeight = 70;
+  const horizontalGap = 40;
+  const verticalGap = 140;
 
-  /* ---------- PERSON NODES ---------- */
-  Object.values(people).forEach((p) => {
-    chart += `${safeID(p.id)}("${safeText(p.name)}<br/>${safeText(
-      p.birth
-    )}${p.death ? " - " + safeText(p.death) : ""}"):::person\n`;
-  });
+  const svg = d3
+    .select(treeRef.current)
+    .append("svg")
+    .attr("width", width)
+    .attr("height", height);
 
-  /* ---------- BUILD FAMILY UNITS ---------- */
-  const families = {};
+  const g = svg.append("g");
 
-  // 1. From spouse relationships
-  Object.values(people).forEach((p) => {
-    if (p.spouse && people[p.spouse]) {
-      const pair = [p.id, p.spouse].sort();
-      const key = pair.join("_");
+  /* ---------- BUILD DATA ---------- */
 
-      if (!families[key]) {
-        families[key] = {
-          id: `M_${key}`,
-          parents: pair,
-          children: [],
-        };
-      }
-    }
-  });
+  const peopleArr = Object.values(people);
 
-  // 2. From children with two parents
-  Object.values(people).forEach((child) => {
-    if (child.parents?.length === 2) {
-      const pair = [...child.parents].sort();
-      const key = pair.join("_");
-
-      if (!families[key]) {
-        families[key] = {
-          id: `M_${key}`,
-          parents: pair,
-          children: [],
-        };
-      }
-
-      families[key].children.push(child.id);
-    }
-  });
-
-  /* ---------- RENDER FAMILY UNITS ---------- */
-  Object.values(families).forEach((fam) => {
-    const [p1, p2] = fam.parents;
-    const mId = fam.id;
-
-    // A. Group spouses horizontally (visual only)
-    chart += `
-subgraph SG_${mId} [" "]
-  direction LR
-  ${safeID(p1)} --- ${safeID(p2)}
-end
-style SG_${mId} fill:none,stroke:none
-`;
-
-    // B. Marriage node
-    chart += `${mId}{ }:::marriage\n`;
-
-    // C. Parents -> marriage (ONLY hierarchy path)
-    chart += `${safeID(p1)} --> ${mId}\n`;
-    chart += `${safeID(p2)} --> ${mId}\n`;
-
-    // D. Marriage -> children
-    fam.children.forEach((cid) => {
-      chart += `${mId} --> ${safeID(cid)}\n`;
+  const childrenMap = {};
+  peopleArr.forEach(p => {
+    (p.parents || []).forEach(pid => {
+      if (!childrenMap[pid]) childrenMap[pid] = [];
+      childrenMap[pid].push(p.id);
     });
   });
 
-  /* ---------- RENDER ---------- */
-  treeRef.current.innerHTML = `<pre class="mermaid">${chart}</pre>`;
-  await mermaid.run({
-    nodes: treeRef.current.querySelectorAll(".mermaid"),
+  /* ---------- GENERATIONS ---------- */
+
+  const generation = {};
+  function computeGen(id) {
+    if (generation[id] !== undefined) return generation[id];
+    const parents = people[id].parents || [];
+    if (parents.length === 0) return (generation[id] = 0);
+    return (generation[id] =
+      Math.max(...parents.map(p => computeGen(p))) + 1);
+  }
+
+  peopleArr.forEach(p => computeGen(p.id));
+
+  const levels = {};
+  peopleArr.forEach(p => {
+    const g = generation[p.id];
+    if (!levels[g]) levels[g] = [];
+    levels[g].push(p.id);
   });
 
-  applyTransform();
+  /* ---------- COUPLES ---------- */
+
+  const used = new Set();
+  const nodes = [];
+
+  Object.keys(levels).forEach(level => {
+    let x = 100;
+
+    levels[level].forEach(id => {
+      if (used.has(id)) return;
+
+      const p = people[id];
+      if (p.spouse && people[p.spouse] && generation[p.spouse] === generation[id]) {
+        used.add(id);
+        used.add(p.spouse);
+
+        nodes.push({
+          type: "couple",
+          parents: [id, p.spouse],
+          x,
+          y: level * verticalGap + 50
+        });
+
+        x += nodeWidth * 2 + horizontalGap;
+      } else {
+        used.add(id);
+        nodes.push({
+          type: "single",
+          id,
+          x,
+          y: level * verticalGap + 50
+        });
+        x += nodeWidth + horizontalGap;
+      }
+    });
+  });
+
+  /* ---------- DRAW LINKS ---------- */
+
+  nodes.forEach(n => {
+    const kids =
+      n.type === "couple"
+        ? (childrenMap[n.parents[0]] || []).filter(
+            c => (people[c].parents || []).includes(n.parents[1])
+          )
+        : childrenMap[n.id] || [];
+
+    kids.forEach(cid => {
+      const childNode = nodes.find(nn =>
+        nn.type === "single"
+          ? nn.id === cid
+          : nn.parents.includes(cid)
+      );
+      if (!childNode) return;
+
+      svg
+        .append("line")
+        .attr("x1", n.x + nodeWidth)
+        .attr("y1", n.y + nodeHeight)
+        .attr("x2", childNode.x + nodeWidth / 2)
+        .attr("y2", childNode.y)
+        .attr("stroke", "#888")
+        .attr("stroke-width", 2);
+    });
+  });
+
+  /* ---------- DRAW NODES ---------- */
+
+  nodes.forEach(n => {
+    if (n.type === "couple") {
+      n.parents.forEach((pid, i) => {
+        drawPerson(pid, n.x + i * nodeWidth, n.y);
+      });
+    } else {
+      drawPerson(n.id, n.x, n.y);
+    }
+  });
+
+  function drawPerson(id, x, y) {
+    const p = people[id];
+
+    const group = svg
+      .append("g")
+      .attr("transform", `translate(${x}, ${y})`)
+      .style("cursor", "pointer")
+      .on("click", () => openEdit(id));
+
+    group
+      .append("rect")
+      .attr("width", nodeWidth)
+      .attr("height", nodeHeight)
+      .attr("rx", 8)
+      .attr("fill", "#fff")
+      .attr("stroke", "#b91c1c")
+      .attr("stroke-width", 2);
+
+    group
+      .append("text")
+      .attr("x", nodeWidth / 2)
+      .attr("y", 28)
+      .attr("text-anchor", "middle")
+      .attr("font-weight", "bold")
+      .text(p.name);
+
+    group
+      .append("text")
+      .attr("x", nodeWidth / 2)
+      .attr("y", 48)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "12px")
+      .text(
+        `${p.birth || ""}${p.death ? " – " + p.death : ""}`
+      );
+  }
 }
 
   /* ------------------------- PAN / ZOOM LOGIC ------------------------- */
